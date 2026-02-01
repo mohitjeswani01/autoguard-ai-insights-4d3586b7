@@ -41,7 +41,7 @@ const stats = [
   { value: "2.5M+", label: "Claims Processed" },
   { value: "98.5%", label: "Accuracy Rate" },
   { value: "<10s", label: "Avg. Analysis Time" },
-  { value: "$500M+", label: "Payouts Calculated" },
+  { value: "₹500Cr+", label: "Payouts Calculated" },
 ];
 
 export default function Index() {
@@ -240,8 +240,8 @@ export default function Index() {
                 Ready to Transform Your Claims Process?
               </h2>
               <p className="text-slate-300 mb-8 max-w-xl mx-auto">
-                Join 200+ insurance companies already using AutoGuard AI to
-                process millions of claims faster and more accurately.
+                Join 200+ Indian workshops and insurers already using AutoGuard AI to
+                process lakhs of claims faster and more accurately.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button
