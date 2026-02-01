@@ -8,6 +8,7 @@ import {
   Send,
   ArrowLeft,
   Car,
+  FileJson,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -114,7 +115,7 @@ export default function Dashboard() {
             <SeverityMeter severity="moderate" score={58} />
 
             {/* Payout Display */}
-            <PayoutDisplay amount={4250} />
+            <PayoutDisplay amount={42500} />
           </motion.div>
         </div>
 
@@ -157,6 +158,36 @@ export default function Dashboard() {
               >
                 <Download className="w-5 h-5" />
                 Export Data
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => {
+                  const jsonData = {
+                    claimId: "CLM-2024-001234",
+                    vehicle: { model: "BMW 5 Series", plate: "ABC 1234" },
+                    damages: [
+                      { part: "Hood Panel", type: "Dent + Scratch", confidence: 94, cost: 28000 },
+                      { part: "Left Headlight", type: "Crack", confidence: 87, cost: 9500 },
+                      { part: "Front Bumper", type: "Scratch", confidence: 91, cost: 5000 },
+                    ],
+                    totalPayout: 42500,
+                    severity: "moderate",
+                    processingTime: "8.4s",
+                    aiConfidence: 94,
+                  };
+                  const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "claim-CLM-2024-001234.json";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="gap-2"
+              >
+                <FileJson className="w-5 h-5" />
+                Download JSON
               </Button>
               <Button
                 size="lg"

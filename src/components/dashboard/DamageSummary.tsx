@@ -26,7 +26,7 @@ const mockDamages: DamageItem[] = [
     damageType: "Dent + Scratch",
     confidence: 94,
     severity: "severe",
-    estimatedCost: 2800,
+    estimatedCost: 28000,
   },
   {
     id: "dmg-002",
@@ -34,7 +34,7 @@ const mockDamages: DamageItem[] = [
     damageType: "Crack",
     confidence: 87,
     severity: "moderate",
-    estimatedCost: 950,
+    estimatedCost: 9500,
   },
   {
     id: "dmg-003",
@@ -42,7 +42,7 @@ const mockDamages: DamageItem[] = [
     damageType: "Scratch",
     confidence: 91,
     severity: "minor",
-    estimatedCost: 500,
+    estimatedCost: 5000,
   },
 ];
 
@@ -171,7 +171,7 @@ export function DamageSummary({
                         Est. Repair
                       </p>
                       <p className="text-xl font-bold text-foreground">
-                        ${damage.estimatedCost.toLocaleString()}
+                        ₹{damage.estimatedCost.toLocaleString('en-IN')}
                       </p>
                     </div>
                   </div>

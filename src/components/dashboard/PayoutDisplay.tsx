@@ -12,8 +12,8 @@ interface PayoutDisplayProps {
 
 export function PayoutDisplay({
   amount,
-  laborCost = 1200,
-  partsCost = 3050,
+  laborCost = 12000,
+  partsCost = 30500,
   processingTime = 8.4,
   className,
 }: PayoutDisplayProps) {
@@ -28,7 +28,7 @@ export function PayoutDisplay({
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
+              <span className="text-base font-medium">₹</span>
               Estimated Payout
             </p>
             <motion.p
@@ -37,7 +37,7 @@ export function PayoutDisplay({
               transition={{ delay: 0.2 }}
               className="text-4xl md:text-5xl font-bold text-foreground"
             >
-              ${amount.toLocaleString()}
+              ₹{amount.toLocaleString('en-IN')}
             </motion.p>
           </div>
           <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-500 text-sm font-medium">
@@ -55,13 +55,13 @@ export function PayoutDisplay({
             <div className="p-3 rounded-lg bg-muted/50">
               <p className="text-xs text-muted-foreground mb-1">Parts</p>
               <p className="text-lg font-semibold text-foreground">
-                ${partsCost.toLocaleString()}
+                ₹{partsCost.toLocaleString('en-IN')}
               </p>
             </div>
             <div className="p-3 rounded-lg bg-muted/50">
               <p className="text-xs text-muted-foreground mb-1">Labor</p>
               <p className="text-lg font-semibold text-foreground">
-                ${laborCost.toLocaleString()}
+                ₹{laborCost.toLocaleString('en-IN')}
               </p>
             </div>
           </div>

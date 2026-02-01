@@ -58,48 +58,48 @@ const mockClaims: Claim[] = [
   {
     id: "1",
     claimNumber: "CLM-2024-001234",
-    vehiclePlate: "ABC 1234",
-    vehicleModel: "BMW 5 Series",
+    vehiclePlate: "MH 01 AB 1234",
+    vehicleModel: "Maruti Swift",
     date: "2024-01-15",
     aiConfidence: 94,
     status: "approved",
-    payout: 4250,
+    payout: 42500,
   },
   {
     id: "2",
     claimNumber: "CLM-2024-001235",
-    vehiclePlate: "XYZ 5678",
-    vehicleModel: "Mercedes C-Class",
+    vehiclePlate: "DL 02 CD 5678",
+    vehicleModel: "Hyundai Creta",
     date: "2024-01-15",
     aiConfidence: 87,
     status: "processing",
-    payout: 3100,
+    payout: 31000,
   },
   {
     id: "3",
     claimNumber: "CLM-2024-001236",
-    vehiclePlate: "DEF 9012",
-    vehicleModel: "Audi A4",
+    vehiclePlate: "KA 03 EF 9012",
+    vehicleModel: "Tata Nexon",
     date: "2024-01-14",
     aiConfidence: 72,
     status: "under_review",
-    payout: 5800,
+    payout: 58000,
   },
   {
     id: "4",
     claimNumber: "CLM-2024-001237",
-    vehiclePlate: "GHI 3456",
-    vehicleModel: "Tesla Model 3",
+    vehiclePlate: "TN 04 GH 3456",
+    vehicleModel: "Honda City",
     date: "2024-01-14",
     aiConfidence: 96,
     status: "approved",
-    payout: 2200,
+    payout: 22000,
   },
   {
     id: "5",
     claimNumber: "CLM-2024-001238",
-    vehiclePlate: "JKL 7890",
-    vehicleModel: "Ford F-150",
+    vehiclePlate: "GJ 05 IJ 7890",
+    vehicleModel: "Mahindra XUV700",
     date: "2024-01-13",
     aiConfidence: 45,
     status: "rejected",
@@ -108,32 +108,32 @@ const mockClaims: Claim[] = [
   {
     id: "6",
     claimNumber: "CLM-2024-001239",
-    vehiclePlate: "MNO 2345",
-    vehicleModel: "Honda Civic",
+    vehiclePlate: "UP 06 KL 2345",
+    vehicleModel: "Kia Seltos",
     date: "2024-01-13",
     aiConfidence: 91,
     status: "pending",
-    payout: 1850,
+    payout: 18500,
   },
   {
     id: "7",
     claimNumber: "CLM-2024-001240",
-    vehiclePlate: "PQR 6789",
-    vehicleModel: "Toyota Camry",
+    vehiclePlate: "RJ 07 MN 6789",
+    vehicleModel: "Toyota Fortuner",
     date: "2024-01-12",
     aiConfidence: 88,
     status: "approved",
-    payout: 3400,
+    payout: 34000,
   },
   {
     id: "8",
     claimNumber: "CLM-2024-001241",
-    vehiclePlate: "STU 0123",
-    vehicleModel: "Chevrolet Malibu",
+    vehiclePlate: "MP 08 OP 0123",
+    vehicleModel: "Hyundai i20",
     date: "2024-01-12",
     aiConfidence: 83,
     status: "processing",
-    payout: 2900,
+    payout: 29000,
   },
 ];
 
@@ -274,7 +274,7 @@ export default function ClaimsLedger() {
           {[
             { label: "Total Claims", value: "156", change: "+12 this week" },
             { label: "Pending", value: "23", change: "Avg 2.3 days" },
-            { label: "Approved Today", value: "8", change: "$34,200 paid" },
+            { label: "Approved Today", value: "8", change: "₹3,42,000 paid" },
             { label: "Avg AI Confidence", value: "91%", change: "+3% vs last month" },
           ].map((stat, i) => (
             <div
@@ -330,6 +330,7 @@ export default function ClaimsLedger() {
           transition={{ delay: 0.3 }}
           className="rounded-xl border border-border bg-card overflow-hidden"
         >
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
@@ -441,9 +442,9 @@ export default function ClaimsLedger() {
                         {status.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-foreground">
+                    <TableCell className="text-right font-semibold text-foreground whitespace-nowrap">
                       {claim.payout > 0
-                        ? `$${claim.payout.toLocaleString()}`
+                        ? `₹${claim.payout.toLocaleString('en-IN')}`
                         : "—"}
                     </TableCell>
                     <TableCell className="text-right">
@@ -484,6 +485,7 @@ export default function ClaimsLedger() {
               })}
             </TableBody>
           </Table>
+          </div>
 
           {/* Pagination */}
           <div className="flex items-center justify-between p-4 border-t border-border">
