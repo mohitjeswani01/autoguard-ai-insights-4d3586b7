@@ -2,9 +2,9 @@
 import os
 import shutil
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Optional, List
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query, Form
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -15,18 +15,20 @@ import logging
 from math import ceil
 import threading
 from concurrent.futures import ThreadPoolExecutor
+import json
 
 # Import custom services
 from services.yolo_service import LocalAnalyzer
 from services.fallback_service import CloudAnalyzer
 
 # Import database and schemas
-from models.database import init_db, get_db, engine, ClaimModel, AnalysisResultModel, Base, ClaimStatus, SessionLocal
+from models.database import init_db, get_db, engine, ClaimModel, AnalysisResultModel, Base, ClaimStatus, SessionLocal, InsuranceDetailsModel
 from schemas import (
     UploadResponse, AnalysisResult, Claim, ClaimFilters, PaginatedResponse,
     DashboardStats, TrendDataPoint, ApproveClaimRequest, RejectClaimRequest,
     RequestReviewRequest, VehicleInfo, SeverityInfo, DamageAssessment, 
-    BoundingBox, AnalysisStatus, ReportRequest, LoginRequest, Token, User
+    BoundingBox, AnalysisStatus, ReportRequest, LoginRequest, Token, User,
+    InsuranceFormData, InsuranceCalculations, InsuranceDetailsResponse, AnalysisResultWithInsurance
 )
 import base64
 from pathlib import Path
@@ -200,6 +202,132 @@ def calculate_realistic_damage_cost(damage_type: str, confidence: float, area_si
     return round(parts_cost + labor_cost, 2)
 
 # ============================================
+# INSURANCE CALCULATION HELPERS
+# ============================================
+
+def get_irdai_depreciation_rate(age_years: float) -> float:
+    """
+    Get IRDAI-mandated depreciation rate based on vehicle age.
+    These rates are used to calculate IDV (Insured Declared Value).
+    """
+    if age_years <= 0.5:
+        return 0.05  # 5% for vehicles < 6 months
+    elif age_years <= 1:
+        return 0.15  # 15% for 6 months - 1 year
+    elif age_years <= 2:
+        return 0.20  # 20% for 1-2 years
+    elif age_years <= 3:
+        return 0.30  # 30% for 2-3 years
+    elif age_years <= 4:
+        return 0.40  # 40% for 3-4 years
+    else:
+        return 0.50  # 50% for > 4 years
+
+
+def calculate_insurance_values(form_data: InsuranceFormData) -> InsuranceCalculations:
+    """
+    Calculate all insurance-related values based on form data.
+    Returns IDV, resale value, insurer payout, and owner liability.
+    """
+    today = datetime.utcnow().date()
+    
+    # Parse purchase date
+    if form_data.purchaseDate:
+        try:
+            purchase_date = datetime.strptime(form_data.purchaseDate, "%Y-%m-%d").date()
+        except ValueError:
+            purchase_date = today - timedelta(days=365)  # Default to 1 year old
+    else:
+        purchase_date = today - timedelta(days=365)
+    
+    # Calculate vehicle age in years
+    age_days = (today - purchase_date).days
+    age_years = age_days / 365.25
+    
+    # Check if NCR region (Delhi, Noida, Gurgaon, Faridabad, Ghaziabad)
+    ncr_cities = ['delhi', 'noida', 'gurgaon', 'gurugram', 'faridabad', 'ghaziabad']
+    is_ncr = form_data.city.lower() in ncr_cities
+    
+    # Get depreciation rate
+    dep_rate = get_irdai_depreciation_rate(age_years)
+    
+    # Calculate IDV (in Lakhs)
+    idv = form_data.vehiclePriceLakhs * (1 - dep_rate)
+    
+    # Calculate estimated resale value
+    # Resale = min(98% of original, 90% of IDV * condition)
+    resale = min(
+        form_data.vehiclePriceLakhs * 0.98,
+        idv * 0.90 * form_data.vehicleCondition
+    )
+    
+    # Calculate claim payout based on policy type
+    repair_bill = form_data.estimatedRepairBill
+    deductible = 1000  # Standard deductible in INR
+    
+    if form_data.hasZeroDepreciation:
+        # Zero-Dep: Insurer pays full amount minus deductible
+        insurer_payout = max(0, repair_bill - deductible)
+    else:
+        # Standard: Insurer pays 60% minus deductible (40% depreciation on parts)
+        insurer_payout = max(0, (repair_bill * 0.60) - deductible)
+    
+    # Owner liability
+    owner_liability = repair_bill - insurer_payout
+    
+    return InsuranceCalculations(
+        vehicleAgeYears=round(age_years, 2),
+        calculatedIDV=round(idv, 2),
+        estimatedResale=round(resale, 2),
+        insurerPayout=round(insurer_payout, 2),
+        ownerLiability=round(owner_liability, 2),
+        depreciationRate=dep_rate,
+        isNCRRegion=is_ncr
+    )
+
+
+def save_insurance_details(
+    db: Session, 
+    analysis_id: str, 
+    form_data: InsuranceFormData,
+    calculations: InsuranceCalculations
+) -> InsuranceDetailsModel:
+    """Save insurance form data and calculations to database"""
+    
+    # Parse purchase date
+    purchase_date_obj = None
+    if form_data.purchaseDate:
+        try:
+            purchase_date_obj = datetime.strptime(form_data.purchaseDate, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    
+    insurance_record = InsuranceDetailsModel(
+        id=str(uuid.uuid4()),
+        analysisId=analysis_id,
+        ownerName=form_data.ownerName,
+        city=form_data.city,
+        fuelType=form_data.fuelType,
+        vehiclePriceLakhs=form_data.vehiclePriceLakhs,
+        purchaseDate=purchase_date_obj,
+        vehicleCondition=form_data.vehicleCondition,
+        hasZeroDepreciation=form_data.hasZeroDepreciation,
+        hasReturnToInvoice=form_data.hasReturnToInvoice,
+        estimatedRepairBill=form_data.estimatedRepairBill,
+        calculatedIDV=calculations.calculatedIDV,
+        estimatedResale=calculations.estimatedResale,
+        insurerPayout=calculations.insurerPayout,
+        ownerLiability=calculations.ownerLiability,
+        vehicleAgeYears=calculations.vehicleAgeYears,
+    )
+    
+    db.add(insurance_record)
+    db.commit()
+    db.refresh(insurance_record)
+    
+    return insurance_record
+
+# ============================================
 # AUTHENTICATION
 # ============================================
 
@@ -247,10 +375,22 @@ UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(exist_ok=True)
 
 @app.post("/api/v1/analysis/upload", response_model=UploadResponse)
-async def upload_image(image: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_image(
+    image: UploadFile = File(...), 
+    insurance_data: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
     """
-    Upload an image for vehicle damage analysis.
-    Stores image persistently and creates analysis record.
+    Upload an image for vehicle damage analysis with optional insurance form data.
+    
+    Parameters:
+    - image: Vehicle damage image file
+    - insurance_data: Optional JSON string with insurance form data
+    
+    The insurance data enhances AI analysis with context about:
+    - Vehicle age, price, condition
+    - Insurance policy type (Zero-Dep, RTI)
+    - Regional pricing factors
     """
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Uploaded file is not an image.")
@@ -270,7 +410,7 @@ async def upload_image(image: UploadFile = File(...), db: Session = Depends(get_
         # Store relative URL path for frontend access
         image_url = f"/api/v1/uploads/{saved_filename}"
         
-       # Also keep temp path for AI processing
+        # Also keep temp path for AI processing
         temp_path = str(saved_path)
         
         # Create pending analysis record
@@ -286,10 +426,28 @@ async def upload_image(image: UploadFile = File(...), db: Session = Depends(get_
         db.add(db_analysis)
         db.commit()
         
+        # Parse and save insurance data if provided
+        insurance_form = None
+        if insurance_data:
+            try:
+                insurance_json = json.loads(insurance_data)
+                insurance_form = InsuranceFormData(**insurance_json)
+                
+                # Calculate insurance values
+                calculations = calculate_insurance_values(insurance_form)
+                
+                # Save to database
+                save_insurance_details(db, analysis_id, insurance_form, calculations)
+                
+                logger.info(f"Saved insurance details for analysis {analysis_id}")
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Invalid insurance data format: {e}")
+                # Continue without insurance data - don't fail the upload
+        
         logger.info(f"Created analysis record: {analysis_id}, saved image to {saved_path}")
         
-        # Submit for background processing
-        executor.submit(process_image_sync, analysis_id, temp_path)
+        # Submit for background processing (pass insurance_form for enhanced prompt)
+        executor.submit(process_image_sync, analysis_id, temp_path, insurance_form)
         
         return UploadResponse(
             analysisId=analysis_id,
@@ -313,10 +471,15 @@ async def get_uploaded_image(filename: str):
     return FileResponse(file_path, media_type="image/jpeg")
 
 
-def process_image_sync(analysis_id: str, temp_path: str):
+def process_image_sync(analysis_id: str, temp_path: str, insurance_form: Optional[InsuranceFormData] = None):
     """
     Background worker - does NOT delete image file.
     Image is stored persistently in uploads directory.
+    
+    Args:
+        analysis_id: Unique ID for this analysis
+        temp_path: Path to the uploaded image
+        insurance_form: Optional insurance form data for enhanced analysis
     """
     db = SessionLocal()
     try:
@@ -330,26 +493,38 @@ def process_image_sync(analysis_id: str, temp_path: str):
             logger.error(f"Analysis {analysis_id} not found")
             return
         
-        # Try Local YOLO
-        logger.info(f"Attempting YOLO detection for {analysis_id}")
-        yolo_result = local_ai.detect(temp_path)
+        # PRIORITY 1: Cloud Analysis (Gemini) with insurance context
+        cloud_success = False
+        try:
+            logger.info(f"Attempting Cloud (Gemini) analysis for {analysis_id}")
+            cloud_result = cloud_ai.get_analysis(temp_path, insurance_form)
+            
+            # Check if we got valid damages or a high confidence result
+            if cloud_result and (cloud_result.get("damages") or cloud_result.get("confidence", 0) > 0):
+                format_and_save_result(db_analysis, cloud_result, "Cloud-Neural-Engine", db)
+                logger.info(f"Cloud analysis completed successfully for {analysis_id}")
+                cloud_success = True
+            else:
+                logger.warning(f"Cloud analysis returned empty/low confidence for {analysis_id}")
         
-        if yolo_result is None:
-            logger.info(f"YOLO failed, falling back to Cloud for {analysis_id}")
+        except Exception as e:
+            logger.error(f"Cloud analysis failed: {str(e)}")
+        
+        # PRIORITY 2: Local Fallback (YOLO) if Cloud failed
+        if not cloud_success:
+            logger.info(f"Falling back to Local (YOLO) detection for {analysis_id}")
             try:
-                cloud_result = cloud_ai.get_analysis(temp_path)
-                if cloud_result and cloud_result.get("damages"):
-                    format_and_save_result(db_analysis, cloud_result, "Cloud-Neural-Engine", db)
-                    logger.info(f"Cloud analysis completed for {analysis_id}")
+                yolo_result = local_ai.detect(temp_path)
+                
+                if yolo_result is not None:
+                    format_and_save_yolo_result_improved(db_analysis, yolo_result, "Local-Vision-Core", db)
+                    logger.info(f"YOLO analysis completed for {analysis_id}")
                 else:
-                    logger.warning(f"Cloud analysis returned empty result for {analysis_id}")
+                    logger.warning(f"All analysis methods failed for {analysis_id}")
                     format_empty_result(db_analysis, db)
             except Exception as e:
-                logger.error(f"Cloud analysis failed: {str(e)}")
+                logger.error(f"Local analysis failed: {str(e)}")
                 format_empty_result(db_analysis, db)
-        else:
-            format_and_save_yolo_result_improved(db_analysis, yolo_result, "Local-Vision-Core", db)
-            logger.info(f"YOLO analysis completed for {analysis_id}")
         
         db.commit()
         logger.info(f"Processing complete for {analysis_id}")
@@ -499,6 +674,95 @@ async def get_analysis_result(analysis_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Analysis not found")
     
     return model_to_analysis_result(db_analysis)
+
+
+@app.get("/api/v1/analysis/{analysis_id}/with-insurance", response_model=AnalysisResultWithInsurance)
+async def get_analysis_with_insurance(analysis_id: str, db: Session = Depends(get_db)):
+    """Retrieve analysis results with insurance details"""
+    db_analysis = db.query(AnalysisResultModel).filter(
+        AnalysisResultModel.id == analysis_id
+    ).first()
+    
+    if not db_analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    
+    # Get base analysis result
+    result = model_to_analysis_result(db_analysis)
+    
+    # Get insurance details if available
+    insurance_details = None
+    if db_analysis.insuranceDetails:
+        ins = db_analysis.insuranceDetails
+        calculations = None
+        if ins.calculatedIDV is not None:
+            calculations = InsuranceCalculations(
+                vehicleAgeYears=ins.vehicleAgeYears or 0,
+                calculatedIDV=ins.calculatedIDV,
+                estimatedResale=ins.estimatedResale or 0,
+                insurerPayout=ins.insurerPayout or 0,
+                ownerLiability=ins.ownerLiability or 0,
+                depreciationRate=get_irdai_depreciation_rate(ins.vehicleAgeYears or 0),
+                isNCRRegion=ins.city.lower() in ['delhi', 'noida', 'gurgaon', 'gurugram', 'faridabad', 'ghaziabad']
+            )
+        
+        insurance_details = InsuranceDetailsResponse(
+            id=ins.id,
+            analysisId=ins.analysisId,
+            ownerName=ins.ownerName,
+            city=ins.city,
+            fuelType=ins.fuelType,
+            vehiclePriceLakhs=ins.vehiclePriceLakhs,
+            purchaseDate=ins.purchaseDate.isoformat() if ins.purchaseDate else None,
+            vehicleCondition=ins.vehicleCondition,
+            hasZeroDepreciation=ins.hasZeroDepreciation,
+            hasReturnToInvoice=ins.hasReturnToInvoice,
+            estimatedRepairBill=ins.estimatedRepairBill,
+            calculations=calculations
+        )
+    
+    return AnalysisResultWithInsurance(
+        **result.dict(),
+        insuranceDetails=insurance_details
+    )
+
+
+@app.get("/api/v1/analysis/{analysis_id}/insurance", response_model=InsuranceDetailsResponse)
+async def get_insurance_details(analysis_id: str, db: Session = Depends(get_db)):
+    """Get insurance details for an analysis"""
+    insurance = db.query(InsuranceDetailsModel).filter(
+        InsuranceDetailsModel.analysisId == analysis_id
+    ).first()
+    
+    if not insurance:
+        raise HTTPException(status_code=404, detail="Insurance details not found for this analysis")
+    
+    calculations = None
+    if insurance.calculatedIDV is not None:
+        calculations = InsuranceCalculations(
+            vehicleAgeYears=insurance.vehicleAgeYears or 0,
+            calculatedIDV=insurance.calculatedIDV,
+            estimatedResale=insurance.estimatedResale or 0,
+            insurerPayout=insurance.insurerPayout or 0,
+            ownerLiability=insurance.ownerLiability or 0,
+            depreciationRate=get_irdai_depreciation_rate(insurance.vehicleAgeYears or 0),
+            isNCRRegion=insurance.city.lower() in ['delhi', 'noida', 'gurgaon', 'gurugram', 'faridabad', 'ghaziabad']
+        )
+    
+    return InsuranceDetailsResponse(
+        id=insurance.id,
+        analysisId=insurance.analysisId,
+        ownerName=insurance.ownerName,
+        city=insurance.city,
+        fuelType=insurance.fuelType,
+        vehiclePriceLakhs=insurance.vehiclePriceLakhs,
+        purchaseDate=insurance.purchaseDate.isoformat() if insurance.purchaseDate else None,
+        vehicleCondition=insurance.vehicleCondition,
+        hasZeroDepreciation=insurance.hasZeroDepreciation,
+        hasReturnToInvoice=insurance.hasReturnToInvoice,
+        estimatedRepairBill=insurance.estimatedRepairBill,
+        calculations=calculations
+    )
+
 
 @app.get("/api/v1/analysis/{analysis_id}/status", response_model=AnalysisStatus)
 async def get_analysis_status(analysis_id: str, db: Session = Depends(get_db)):

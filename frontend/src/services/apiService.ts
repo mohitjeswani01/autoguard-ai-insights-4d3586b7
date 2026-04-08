@@ -102,6 +102,51 @@ export interface ApiError {
 }
 
 // ============================================
+// INSURANCE FORM INTERFACES
+// ============================================
+
+export interface InsuranceFormData {
+  ownerName?: string;
+  city: string;
+  fuelType: string;
+  vehiclePriceLakhs: number;
+  purchaseDate?: string;
+  vehicleCondition: number;
+  hasZeroDepreciation: boolean;
+  hasReturnToInvoice: boolean;
+  estimatedRepairBill: number;
+}
+
+export interface InsuranceCalculations {
+  vehicleAgeYears: number;
+  calculatedIDV: number;
+  estimatedResale: number;
+  insurerPayout: number;
+  ownerLiability: number;
+  depreciationRate: number;
+  isNCRRegion: boolean;
+}
+
+export interface InsuranceDetailsResponse {
+  id: string;
+  analysisId: string;
+  ownerName?: string;
+  city: string;
+  fuelType: string;
+  vehiclePriceLakhs: number;
+  purchaseDate?: string;
+  vehicleCondition: number;
+  hasZeroDepreciation: boolean;
+  hasReturnToInvoice: boolean;
+  estimatedRepairBill: number;
+  calculations?: InsuranceCalculations;
+}
+
+export interface AnalysisResultWithInsurance extends AnalysisResult {
+  insuranceDetails?: InsuranceDetailsResponse;
+}
+
+// ============================================
 // API SERVICE CLASS
 // ============================================
 
@@ -177,9 +222,14 @@ class ApiService {
   // DAMAGE ANALYSIS ENDPOINTS
   // ============================================
 
-  async uploadImage(file: File): Promise<UploadResponse> {
+  async uploadImage(file: File, insuranceData?: InsuranceFormData): Promise<UploadResponse> {
     const formData = new FormData();
     formData.append('image', file);
+    
+    // Add insurance data if provided
+    if (insuranceData) {
+      formData.append('insurance_data', JSON.stringify(insuranceData));
+    }
 
     const response = await fetch(`${this.baseUrl}/analysis/upload`, {
       method: 'POST',
@@ -195,6 +245,14 @@ class ApiService {
 
   async getAnalysisResult(analysisId: string): Promise<AnalysisResult> {
     return this.request<AnalysisResult>(`/analysis/${analysisId}`);
+  }
+
+  async getAnalysisWithInsurance(analysisId: string): Promise<AnalysisResultWithInsurance> {
+    return this.request<AnalysisResultWithInsurance>(`/analysis/${analysisId}/with-insurance`);
+  }
+
+  async getInsuranceDetails(analysisId: string): Promise<InsuranceDetailsResponse> {
+    return this.request<InsuranceDetailsResponse>(`/analysis/${analysisId}/insurance`);
   }
 
   async getAnalysisStatus(analysisId: string): Promise<{ status: string; progress: number }> {

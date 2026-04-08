@@ -12,6 +12,7 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -19,14 +20,16 @@ import { ImageViewer } from "@/components/dashboard/ImageViewer";
 import { DamageSummary } from "@/components/dashboard/DamageSummary";
 import { SeverityMeter } from "@/components/dashboard/SeverityMeter";
 import { PayoutDisplay } from "@/components/dashboard/PayoutDisplay";
+import { InsuranceDetailsPanel } from "@/components/dashboard/InsuranceDetailsPanel";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { apiService, AnalysisResult, Claim } from "@/services/apiService";
+import { apiService, AnalysisResult, Claim, InsuranceDetailsResponse } from "@/services/apiService";
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams();
   const [selectedDamageId, setSelectedDamageId] = useState<string | undefined>();
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [claim, setClaim] = useState<Claim | null>(null);
+  const [insuranceDetails, setInsuranceDetails] = useState<InsuranceDetailsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +114,8 @@ export default function Dashboard() {
           // Create claim record from analysis
           if (data.status === "completed") {
             createClaim(data);
+            // Fetch insurance details if available
+            fetchInsuranceDetails(analysisId);
           }
         }
       } catch (err) {
@@ -124,6 +129,17 @@ export default function Dashboard() {
 
     fetchAnalysis();
   }, [analysisId]);
+
+  const fetchInsuranceDetails = async (id: string) => {
+    try {
+      const details = await apiService.getInsuranceDetails(id);
+      setInsuranceDetails(details);
+      console.log("Insurance details:", details);
+    } catch (err) {
+      // Insurance details are optional, don't show error
+      console.log("No insurance details available for this analysis");
+    }
+  };
 
   const createClaim = async (analysisData: AnalysisResult) => {
     try {
@@ -311,6 +327,11 @@ export default function Dashboard() {
                   : 8.4
               }
             />
+
+            {/* Insurance Details Panel */}
+            {insuranceDetails && (
+              <InsuranceDetailsPanel insurance={insuranceDetails} />
+            )}
           </motion.div>
         </div>
 

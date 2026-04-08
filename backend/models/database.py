@@ -1,8 +1,8 @@
 # backend/models/database.py
-from sqlalchemy import create_engine, Column, String, Float, Integer, DateTime, JSON, Enum, Text, ForeignKey
+from sqlalchemy import create_engine, Column, String, Float, Integer, DateTime, JSON, Enum, Text, ForeignKey, Boolean, Date
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+from datetime import datetime, date
 import enum
 import uuid
 
@@ -37,6 +37,13 @@ class SeverityLevel(str, enum.Enum):
     moderate = "moderate"
     severe = "severe"
 
+class FuelType(str, enum.Enum):
+    petrol = "Petrol"
+    diesel = "Diesel"
+    cng = "CNG"
+    electric = "Electric"
+    hybrid = "Hybrid"
+
 class AnalysisResultModel(Base):
     __tablename__ = "analysis_results"
     
@@ -60,6 +67,42 @@ class AnalysisResultModel(Base):
     
     # Relationship
     claims = relationship("ClaimModel", back_populates="analysisResult")
+    insuranceDetails = relationship("InsuranceDetailsModel", back_populates="analysis", uselist=False)
+
+
+class InsuranceDetailsModel(Base):
+    """Stores insurance form data submitted with damage analysis"""
+    __tablename__ = "insurance_details"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    analysisId = Column(String, ForeignKey("analysis_results.id"), nullable=False, unique=True)
+    
+    # Owner & Vehicle Info
+    ownerName = Column(String, nullable=True)
+    city = Column(String, default="Mumbai")
+    fuelType = Column(String, default="Petrol")
+    vehiclePriceLakhs = Column(Float, default=10.0)  # Price in Lakhs (INR)
+    purchaseDate = Column(Date, nullable=True)
+    vehicleCondition = Column(Float, default=1.0)  # 0.0 to 1.0 scale
+    
+    # Insurance Policy Add-ons
+    hasZeroDepreciation = Column(Boolean, default=False)
+    hasReturnToInvoice = Column(Boolean, default=False)
+    
+    # Claim Simulation
+    estimatedRepairBill = Column(Float, default=50000.0)  # INR
+    
+    # Calculated Fields (stored after processing)
+    calculatedIDV = Column(Float, nullable=True)  # Insured Declared Value in Lakhs
+    estimatedResale = Column(Float, nullable=True)  # Resale value in Lakhs
+    insurerPayout = Column(Float, nullable=True)  # What insurer pays (INR)
+    ownerLiability = Column(Float, nullable=True)  # What owner pays (INR)
+    vehicleAgeYears = Column(Float, nullable=True)  # Calculated age
+    
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    analysis = relationship("AnalysisResultModel", back_populates="insuranceDetails")
 
 class ClaimModel(Base):
     __tablename__ = "claims"

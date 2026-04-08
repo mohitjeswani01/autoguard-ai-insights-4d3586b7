@@ -1,7 +1,7 @@
 # backend/schemas.py
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 
 # Enums
@@ -29,6 +29,13 @@ class AnalysisStatusEnum(str, Enum):
     processing = "processing"
     completed = "completed"
     failed = "failed"
+
+class FuelTypeEnum(str, Enum):
+    petrol = "Petrol"
+    diesel = "Diesel"
+    cng = "CNG"
+    electric = "Electric"
+    hybrid = "Hybrid"
 
 # BoundingBox
 class BoundingBox(BaseModel):
@@ -172,3 +179,69 @@ class User(BaseModel):
     username: str
     full_name: Optional[str] = None
     disabled: Optional[bool] = None
+
+# ============================================
+# INSURANCE FORM SCHEMAS
+# ============================================
+
+class InsuranceFormData(BaseModel):
+    """Input schema for insurance form submission"""
+    ownerName: Optional[str] = Field(None, description="Vehicle owner's name")
+    city: str = Field("Mumbai", description="City for regional pricing")
+    fuelType: str = Field("Petrol", description="Fuel type: Petrol, Diesel, CNG, Electric, Hybrid")
+    vehiclePriceLakhs: float = Field(10.0, ge=1.0, le=500.0, description="Vehicle price in Lakhs INR")
+    purchaseDate: Optional[str] = Field(None, description="Purchase date in YYYY-MM-DD format")
+    vehicleCondition: float = Field(1.0, ge=0.0, le=1.0, description="Condition rating 0.0-1.0")
+    hasZeroDepreciation: bool = Field(False, description="Zero-Depreciation add-on")
+    hasReturnToInvoice: bool = Field(False, description="Return-to-Invoice add-on")
+    estimatedRepairBill: float = Field(50000.0, ge=0, description="Estimated repair bill in INR")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "ownerName": "Rajesh Kumar",
+                "city": "Mumbai",
+                "fuelType": "Petrol",
+                "vehiclePriceLakhs": 12.5,
+                "purchaseDate": "2022-03-15",
+                "vehicleCondition": 0.9,
+                "hasZeroDepreciation": True,
+                "hasReturnToInvoice": False,
+                "estimatedRepairBill": 75000
+            }
+        }
+
+
+class InsuranceCalculations(BaseModel):
+    """Calculated insurance values based on form data"""
+    vehicleAgeYears: float = Field(..., description="Vehicle age in years")
+    calculatedIDV: float = Field(..., description="Insured Declared Value in Lakhs")
+    estimatedResale: float = Field(..., description="Estimated resale value in Lakhs")
+    insurerPayout: float = Field(..., description="Amount insurer pays in INR")
+    ownerLiability: float = Field(..., description="Amount owner pays in INR")
+    depreciationRate: float = Field(..., description="IRDAI depreciation rate applied")
+    isNCRRegion: bool = Field(..., description="Whether city is in NCR region")
+
+
+class InsuranceDetailsResponse(BaseModel):
+    """Response schema with form data + calculations"""
+    id: str
+    analysisId: str
+    ownerName: Optional[str] = None
+    city: str
+    fuelType: str
+    vehiclePriceLakhs: float
+    purchaseDate: Optional[str] = None
+    vehicleCondition: float
+    hasZeroDepreciation: bool
+    hasReturnToInvoice: bool
+    estimatedRepairBill: float
+    calculations: Optional[InsuranceCalculations] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AnalysisResultWithInsurance(AnalysisResult):
+    """Extended analysis result including insurance details"""
+    insuranceDetails: Optional[InsuranceDetailsResponse] = None

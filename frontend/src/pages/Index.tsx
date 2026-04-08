@@ -38,10 +38,10 @@ const features = [
 ];
 
 const stats = [
-  { value: "2.5M+", label: "Claims Processed" },
-  { value: "98.5%", label: "Accuracy Rate" },
-  { value: "<10s", label: "Avg. Analysis Time" },
-  { value: "₹500Cr+", label: "Payouts Calculated" },
+  { value: "2.5k+", label: "Claims Processed" },
+  { value: "80.5%", label: "Accuracy Rate" },
+  { value: "<20s", label: "Avg. Analysis Time" },
+  { value: "₹500Kr+", label: "Payouts Calculated" },
 ];
 
 export default function Index() {
