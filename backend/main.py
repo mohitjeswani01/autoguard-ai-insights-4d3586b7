@@ -433,6 +433,15 @@ async def upload_image(
                 insurance_json = json.loads(insurance_data)
                 insurance_form = InsuranceFormData(**insurance_json)
                 
+                # *** FIX: stamp vehicle name + plate onto the analysis record NOW ***
+                if insurance_form.vehicleName:
+                    db_analysis.vehicleModel = insurance_form.vehicleName
+                if insurance_form.plateNumber:
+                    db_analysis.vehiclePlateNumber = insurance_form.plateNumber
+                if insurance_form.ownerName:
+                    db_analysis.vehicleMake = insurance_form.ownerName
+                db.commit()  # persist vehicle info immediately
+                
                 # Calculate insurance values
                 calculations = calculate_insurance_values(insurance_form)
                 
@@ -635,32 +644,37 @@ def format_and_save_result(
 ):
     """Parse cloud analysis results and save to database"""
     damages = cloud_result.get("damages", [])
-    total_cost = sum(d.get("estimatedCost", 0) for d in damages)
+    total_cost = cloud_result.get("totalEstimatedCost", sum(d.get("estimatedCost", 0) for d in damages))
     confidence = cloud_result.get("confidence", 0.7)
-    
-    # Format damages
+
+    # Map AI overallSeverity or derive from confidence
+    ai_severity = cloud_result.get("overallSeverity", None)
+    if ai_severity in ("minor", "moderate", "severe"):
+        severity_level = ai_severity
+    else:
+        severity_level = "severe" if confidence > 0.75 else "moderate" if confidence > 0.5 else "minor"
+    severity_score = confidence * 100
+
+    # Format damages — use 'part' key (new normalised format)
     formatted_damages = []
     for dmg in damages:
         formatted_damages.append({
             "id": str(uuid.uuid4()),
-            "partIdentified": dmg.get("part", "Unknown"),
+            "partIdentified": dmg.get("part", dmg.get("partIdentified", "Unknown")),
             "damageType": dmg.get("damageType", "scratch"),
-            "confidenceScore": dmg.get("confidence", 0.5),
+            "confidenceScore": float(dmg.get("confidence", dmg.get("confidenceScore", 0.5))),
             "boundingBox": dmg.get("boundingBox", {"x": 0, "y": 0, "width": 0, "height": 0}),
-            "estimatedCost": dmg.get("estimatedCost", 0),
+            "estimatedCost": float(dmg.get("estimatedCost", 0)),
         })
-    
-    severity_level = "severe" if confidence > 0.7 else "moderate" if confidence > 0.5 else "minor"
-    severity_score = confidence * 100
-    
+
     db_analysis.damages = formatted_damages
-    db_analysis.totalEstimatedCost = total_cost
+    db_analysis.totalEstimatedCost = float(total_cost)
     db_analysis.aiConfidence = confidence
     db_analysis.engine = engine
     db_analysis.status = "completed"
     db_analysis.processedAt = datetime.utcnow()
     db_analysis.overallSeverityLevel = severity_level
-    db_analysis.overallSeverityScore = severity_score
+    db_analysis.overallSeverityScore = min(severity_score, 100.0)
     db_analysis.overallSeverityDescription = f"{severity_level.capitalize()} vehicle damage detected"
 
 @app.get("/api/v1/analysis/{analysis_id}", response_model=AnalysisResult)

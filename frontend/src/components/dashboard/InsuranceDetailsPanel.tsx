@@ -2,7 +2,6 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { 
   ShieldCheck, 
-  AlertTriangle, 
   IndianRupee, 
   Calendar,
   MapPin,
@@ -130,60 +129,7 @@ export function InsuranceDetailsPanel({ insurance, className }: InsuranceDetails
           </div>
         </div>
 
-        {/* Valuation & Payout */}
-        {calculations && (
-          <div className="space-y-3 pt-3 border-t border-border">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-blue-500/10 rounded-xl text-center">
-                <p className="text-xs text-muted-foreground uppercase font-bold">IDV</p>
-                <p className="text-xl font-bold text-blue-500">
-                  ₹{calculations.calculatedIDV.toFixed(2)}L
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  ({(calculations.depreciationRate * 100).toFixed(0)}% dep.)
-                </p>
-              </div>
-              
-              <div className="p-3 bg-emerald-500/10 rounded-xl text-center">
-                <p className="text-xs text-muted-foreground uppercase font-bold">Resale Est.</p>
-                <p className="text-xl font-bold text-emerald-500">
-                  ₹{calculations.estimatedResale.toFixed(2)}L
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  ({(insurance.vehicleCondition * 100).toFixed(0)}% condition)
-                </p>
-              </div>
-            </div>
 
-            {/* Claim Simulation Result */}
-            <div className="p-3 bg-slate-900 rounded-xl text-white">
-              <p className="text-xs text-slate-400 mb-2">
-                Repair Bill: ₹{insurance.estimatedRepairBill.toLocaleString('en-IN')}
-              </p>
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-xs text-slate-400">Insurer Pays</p>
-                  <p className="text-lg font-bold text-emerald-400">
-                    ₹{calculations.insurerPayout.toLocaleString('en-IN')}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-400">Your Liability</p>
-                  <p className="text-lg font-bold text-red-400">
-                    ₹{calculations.ownerLiability.toLocaleString('en-IN')}
-                  </p>
-                </div>
-              </div>
-              
-              {!insurance.hasZeroDepreciation && (
-                <p className="text-xs text-amber-400 mt-2 flex items-center gap-1">
-                  <AlertTriangle size={12} />
-                  40% parts depreciation applied (standard policy)
-                </p>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </motion.div>
   );

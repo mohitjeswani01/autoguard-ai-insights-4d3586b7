@@ -41,7 +41,7 @@ const stats = [
   { value: "2.5k+", label: "Claims Processed" },
   { value: "80.5%", label: "Accuracy Rate" },
   { value: "<20s", label: "Avg. Analysis Time" },
-  { value: "₹500Kr+", label: "Payouts Calculated" },
+  { value: "500+", label: "Payouts Calculated" },
 ];
 
 export default function Index() {

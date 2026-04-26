@@ -1,18 +1,15 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  FileText,
   CheckCircle,
   AlertTriangle,
   Download,
   Send,
   ArrowLeft,
   Car,
-  FileJson,
   Loader2,
   AlertCircle,
   RefreshCw,
-  ShieldCheck,
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -41,46 +38,29 @@ export default function Dashboard() {
     setSelectedDamageId(box.id);
   };
 
-  const handleGenerateReport = async () => {
-    if (!claim) {
-      alert("Please wait for analysis to complete");
-      return;
-    }
-
-    try {
-      const reportBlob = await apiService.generateReport({
-        claimId: claim.id,
-        includeImages: true,
-        includeConfidenceMetrics: true,
-        format: "json",
-      });
-
-      const url = URL.createObjectURL(new Blob([JSON.stringify(reportBlob, null, 2)]));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `claim-${claim.claimNumber}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Report generation error:", err);
-      alert("Failed to generate report");
-    }
-  };
 
   const handleApproveClaim = async () => {
     if (!claim) {
       alert("Please wait for analysis to complete");
       return;
     }
-
     try {
       const updatedClaim = await apiService.approveClaim(claim.id, "Approved by adjuster");
-      alert(`Claim ${updatedClaim.claimNumber} approved successfully!`);
-      // Refresh claims list and navigate
-      setTimeout(() => navigate("/claims"), 1000);
+      setClaim(updatedClaim); // ← update local state immediately
     } catch (err) {
       console.error("Approval error:", err);
-      alert("Failed to approve claim. Make sure the claim exists in the system.");
+      alert("Failed to approve claim.");
+    }
+  };
+
+  const handleRejectClaim = async () => {
+    if (!claim) return;
+    try {
+      const updatedClaim = await apiService.rejectClaim(claim.id, "Rejected by adjuster");
+      setClaim(updatedClaim); // ← update local state immediately
+    } catch (err) {
+      console.error("Rejection error:", err);
+      alert("Failed to reject claim");
     }
   };
 
@@ -318,14 +298,10 @@ export default function Dashboard() {
             {/* Payout Display */}
             <PayoutDisplay
               amount={analysis.totalEstimatedCost}
-              partsCost={Math.round(analysis.totalEstimatedCost * 0.714)} // Approx 1 / 1.4
-              laborCost={Math.round(analysis.totalEstimatedCost * 0.286)} // Approx 0.4 / 1.4
+              partsCost={Math.round(analysis.totalEstimatedCost * 0.714)}
+              laborCost={Math.round(analysis.totalEstimatedCost * 0.286)}
               confidence={Math.round(analysis.aiConfidence * 100)}
-              processingTime={
-                claim && claim.submittedAt && claim.processedAt
-                  ? Math.round((new Date(claim.processedAt).getTime() - new Date(claim.submittedAt).getTime()) / 1000 * 10) / 10
-                  : 8.4
-              }
+              damagesCount={analysis.damages?.length || 0}
             />
 
             {/* Insurance Details Panel */}
@@ -343,7 +319,7 @@ export default function Dashboard() {
           className="mt-8 p-6 rounded-2xl bg-card border border-border"
         >
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-            {/* Notes Section */}
+            {/* Analysis Summary */}
             <div className="flex-1">
               <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-warning" />
@@ -359,26 +335,20 @@ export default function Dashboard() {
               </p>
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons — status-aware */}
             <div className="flex flex-col sm:flex-row gap-3 lg:shrink-0">
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={handleGenerateReport}
-                className="gap-2"
-              >
-                <FileText className="w-5 h-5" />
-                Generate Report
-              </Button>
+              {/* Always show Export */}
               <Button
                 variant="outline"
                 size="lg"
                 onClick={() => {
                   const jsonData = {
                     claimNumber: claim?.claimNumber,
+                    status: claim?.status,
                     analysis: analysis,
                     damages: analysis?.damages,
                     totalCost: analysis?.totalEstimatedCost,
+                    generatedAt: new Date().toISOString(),
                   };
                   const blob = new Blob([JSON.stringify(jsonData, null, 2)], {
                     type: "application/json",
@@ -386,7 +356,7 @@ export default function Dashboard() {
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
                   a.href = url;
-                  a.download = `claim-${claim?.claimNumber}.json`;
+                  a.download = `claim-${claim?.claimNumber || "report"}.json`;
                   a.click();
                   URL.revokeObjectURL(url);
                 }}
@@ -395,33 +365,64 @@ export default function Dashboard() {
                 <Download className="w-5 h-5" />
                 Export Data
               </Button>
-              <Button
-                variant="destructive"
-                size="lg"
-                onClick={async () => {
-                  if (!claim) return;
-                  try {
-                    await apiService.rejectClaim(claim.id, "Rejected by adjuster");
-                    alert("Claim rejected successfully!");
-                    navigate("/claims");
-                  } catch (err) {
-                    console.error("Rejection error:", err);
-                    alert("Failed to reject claim");
-                  }
-                }}
-                className="gap-2"
-              >
-                <AlertCircle className="w-5 h-5" />
-                Reject Claim
-              </Button>
-              <Button
-                size="lg"
-                onClick={handleApproveClaim}
-                className="gap-2 bg-emerald-500 hover:bg-emerald-600 text-white"
-              >
-                <Send className="w-5 h-5" />
-                Approve Claim
-              </Button>
+
+              {/* Status-aware action area */}
+              {claim?.status === "approved" ? (
+                // ✅ APPROVED state
+                <>
+                  <div className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 font-semibold">
+                    <CheckCircle className="w-5 h-5" />
+                    Claim Approved
+                  </div>
+                  <Button
+                    size="lg"
+                    onClick={() => navigate("/")}
+                    className="gap-2 bg-blue-500 hover:bg-blue-600 text-white"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                    Analyze Another Vehicle
+                  </Button>
+                </>
+              ) : claim?.status === "rejected" ? (
+                // ❌ REJECTED state
+                <>
+                  <div className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 font-semibold">
+                    <AlertCircle className="w-5 h-5" />
+                    Claim Rejected
+                  </div>
+                  <Button
+                    size="lg"
+                    onClick={() => navigate("/")}
+                    className="gap-2 bg-blue-500 hover:bg-blue-600 text-white"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                    Analyze Another Vehicle
+                  </Button>
+                </>
+              ) : (
+                // ⏳ PENDING / PROCESSING state — show action buttons
+                <>
+                  <Button
+                    variant="destructive"
+                    size="lg"
+                    onClick={handleRejectClaim}
+                    disabled={!claim}
+                    className="gap-2"
+                  >
+                    <AlertCircle className="w-5 h-5" />
+                    Reject Claim
+                  </Button>
+                  <Button
+                    size="lg"
+                    onClick={handleApproveClaim}
+                    disabled={!claim}
+                    className="gap-2 bg-emerald-500 hover:bg-emerald-600 text-white"
+                  >
+                    <Send className="w-5 h-5" />
+                    Approve Claim
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </motion.div>

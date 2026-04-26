@@ -52,12 +52,22 @@ export default function ClaimsLedger() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(""); // actual value sent to API
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<SortField>("submittedAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const navigate = useNavigate();
+
+  // Debounce: wait 500ms after user stops typing before firing API
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1); // reset to page 1 on new search
+    }, 500);
+    return () => clearTimeout(timer); // cancel if user keeps typing
+  }, [searchQuery]);
 
   // Fetch claims from API
   useEffect(() => {
@@ -67,7 +77,7 @@ export default function ClaimsLedger() {
         setError(null);
         const response = await apiService.getClaims({
           status: statusFilter !== "all" ? (statusFilter as any) : undefined,
-          searchQuery: searchQuery || undefined,
+          searchQuery: debouncedSearch || undefined,
           page,
           limit: pageSize,
         });
@@ -81,7 +91,7 @@ export default function ClaimsLedger() {
     };
 
     fetchClaims();
-  }, [statusFilter, searchQuery, page, pageSize]);
+  }, [statusFilter, debouncedSearch, page, pageSize]);
 
   const getStatusIcon = (status: Claim["status"]) => {
     switch (status) {
@@ -253,10 +263,21 @@ export default function ClaimsLedger() {
                         {claim.claimNumber}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {claim.vehicleInfo?.model || "Unknown"}
+                        <div className="flex flex-col">
+                          <span className="font-medium">
+                            {claim.vehicleInfo?.model || "Unknown Vehicle"}
+                          </span>
+                          {claim.vehicleInfo?.make && (
+                            <span className="text-xs text-muted-foreground">
+                              {claim.vehicleInfo.make}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-sm">
-                        {claim.vehiclePlate}
+                      <TableCell className="text-sm font-mono">
+                        {claim.vehiclePlate && claim.vehiclePlate !== "Unknown"
+                          ? claim.vehiclePlate
+                          : "—"}
                       </TableCell>
                       <TableCell className="text-sm">
                         {formatDate(claim.submittedAt)}
@@ -297,12 +318,39 @@ export default function ClaimsLedger() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
-                              onClick={() => navigate(`/dashboard`)}
+                              onClick={() => navigate(`/dashboard?id=${claim.id}`)}
                             >
                               <Eye className="w-4 h-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const report = {
+                                  claimNumber: claim.claimNumber,
+                                  status: claim.status,
+                                  vehiclePlate: claim.vehiclePlate,
+                                  vehicleInfo: claim.vehicleInfo,
+                                  submittedAt: claim.submittedAt,
+                                  processedAt: claim.processedAt,
+                                  aiConfidence: `${Math.round(claim.aiConfidence * 100)}%`,
+                                  totalPayout: claim.totalPayout,
+                                  damages: claim.analysisResult?.damages || [],
+                                  overallSeverity: claim.analysisResult?.overallSeverity || null,
+                                  adjusterNotes: claim.adjusterNotes || null,
+                                  generatedAt: new Date().toISOString(),
+                                };
+                                const blob = new Blob(
+                                  [JSON.stringify(report, null, 2)],
+                                  { type: "application/json" }
+                                );
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = `${claim.claimNumber}-report.json`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              }}
+                            >
                               <Download className="w-4 h-4 mr-2" />
                               Download Report
                             </DropdownMenuItem>

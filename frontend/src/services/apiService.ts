@@ -107,6 +107,8 @@ export interface ApiError {
 
 export interface InsuranceFormData {
   ownerName?: string;
+  vehicleName?: string;
+  plateNumber?: string;
   city: string;
   fuelType: string;
   vehiclePriceLakhs: number;

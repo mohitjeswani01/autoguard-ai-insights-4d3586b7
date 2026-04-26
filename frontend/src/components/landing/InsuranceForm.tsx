@@ -6,7 +6,6 @@ import {
   Car, 
   FileText, 
   IndianRupee, 
-  Gavel,
   User,
   MapPin,
   Fuel,
@@ -29,6 +28,8 @@ import {
 // Insurance form data interface
 export interface InsuranceFormData {
   ownerName: string;
+  vehicleName: string;
+  plateNumber: string;
   city: string;
   fuelType: string;
   vehiclePriceLakhs: number;
@@ -69,6 +70,8 @@ export function InsuranceForm({ className, onFormChange, initialData }: Insuranc
   // Form state
   const [formData, setFormData] = useState<InsuranceFormData>({
     ownerName: initialData?.ownerName || '',
+    vehicleName: initialData?.vehicleName || '',
+    plateNumber: initialData?.plateNumber || '',
     city: initialData?.city || 'Mumbai',
     fuelType: initialData?.fuelType || 'Petrol',
     vehiclePriceLakhs: initialData?.vehiclePriceLakhs || 10,
@@ -79,22 +82,15 @@ export function InsuranceForm({ className, onFormChange, initialData }: Insuranc
     estimatedRepairBill: initialData?.estimatedRepairBill || 50000,
   });
 
-  // Calculated values
+
+  // Calculated values for Asset Valuation section
   const today = new Date();
   const purchaseDate = new Date(formData.purchaseDate);
   const ageYears = (today.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
   const isNCR = ['delhi', 'noida', 'gurgaon', 'gurugram', 'faridabad', 'ghaziabad'].includes(formData.city.toLowerCase());
-  
   const depRate = getDepreciationRate(ageYears);
   const idv = formData.vehiclePriceLakhs * (1 - depRate);
   const resale = Math.min(formData.vehiclePriceLakhs * 0.98, idv * 0.90 * formData.vehicleCondition);
-  
-  // Claim payout calculation
-  const deductible = 1000;
-  const insurerPayout = formData.hasZeroDepreciation 
-    ? Math.max(0, formData.estimatedRepairBill - deductible)
-    : Math.max(0, formData.estimatedRepairBill * 0.60 - deductible);
-  const ownerLiability = formData.estimatedRepairBill - insurerPayout;
 
   // Notify parent of form changes
   useEffect(() => {
@@ -149,6 +145,35 @@ export function InsuranceForm({ className, onFormChange, initialData }: Insuranc
               placeholder="Enter owner name"
               value={formData.ownerName}
               onChange={(e) => updateField('ownerName', e.target.value)}
+            />
+          </div>
+
+          {/* Vehicle Name/Model */}
+          <div className="space-y-2">
+            <Label htmlFor="vehicleName" className="flex items-center gap-2">
+              <Car size={14} className="text-muted-foreground" />
+              Vehicle Name / Model <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="vehicleName"
+              placeholder="e.g. Maruti Swift, Honda City"
+              value={formData.vehicleName}
+              onChange={(e) => updateField('vehicleName', e.target.value)}
+            />
+          </div>
+
+          {/* Plate Number */}
+          <div className="space-y-2">
+            <Label htmlFor="plateNumber" className="flex items-center gap-2">
+              <FileText size={14} className="text-muted-foreground" />
+              Vehicle Plate Number <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="plateNumber"
+              placeholder="e.g. MH12AB1234"
+              value={formData.plateNumber}
+              onChange={(e) => updateField('plateNumber', e.target.value.toUpperCase())}
+              className="font-mono"
             />
           </div>
 
@@ -315,50 +340,7 @@ export function InsuranceForm({ className, onFormChange, initialData }: Insuranc
           </div>
         </div>
 
-        {/* Section 3: Claim Simulator */}
-        <div className="space-y-4 p-4 bg-slate-900 rounded-xl text-white">
-          <h4 className="text-sm font-medium text-slate-300 flex items-center gap-2">
-            <Gavel size={16} className="text-blue-400" />
-            Claim Simulator
-          </h4>
-          <p className="text-xs text-slate-400">Estimate repair bill to see payout vs liability</p>
-          
-          <div className="space-y-2">
-            <Slider
-              value={[formData.estimatedRepairBill]}
-              onValueChange={([value]) => updateField('estimatedRepairBill', value)}
-              min={5000}
-              max={500000}
-              step={5000}
-              className="py-2"
-            />
-            <p className="text-right font-mono text-blue-400">
-              Repair Bill: ₹{formData.estimatedRepairBill.toLocaleString('en-IN')}
-            </p>
-          </div>
 
-          <div className="space-y-3 border-t border-slate-700 pt-4">
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400 text-sm">Insurer Pays:</span>
-              <span className="text-lg font-bold text-emerald-400">
-                ₹{insurerPayout.toLocaleString('en-IN')}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400 text-sm">Your Liability:</span>
-              <span className="text-lg font-bold text-red-400">
-                ₹{ownerLiability.toLocaleString('en-IN')}
-              </span>
-            </div>
-          </div>
-
-          {!formData.hasZeroDepreciation && (
-            <p className="text-xs text-amber-400 flex items-center gap-1">
-              <AlertTriangle size={12} />
-              Standard policy: 40% parts depreciation applied
-            </p>
-          )}
-        </div>
       </div>
     </motion.div>
   );

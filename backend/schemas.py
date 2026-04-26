@@ -187,6 +187,8 @@ class User(BaseModel):
 class InsuranceFormData(BaseModel):
     """Input schema for insurance form submission"""
     ownerName: Optional[str] = Field(None, description="Vehicle owner's name")
+    vehicleName: Optional[str] = Field(None, description="Vehicle make/model name e.g. Maruti Swift")
+    plateNumber: Optional[str] = Field(None, description="Vehicle registration plate number")
     city: str = Field("Mumbai", description="City for regional pricing")
     fuelType: str = Field("Petrol", description="Fuel type: Petrol, Diesel, CNG, Electric, Hybrid")
     vehiclePriceLakhs: float = Field(10.0, ge=1.0, le=500.0, description="Vehicle price in Lakhs INR")
